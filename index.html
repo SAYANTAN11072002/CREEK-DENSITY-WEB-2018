@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="initial-scale=1,user-scalable=no,maximum-scale=1,width=device-width">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <link rel="stylesheet" href="css/leaflet.css">
+        <link rel="stylesheet" href="css/L.Control.Layers.Tree.css">
+        <link rel="stylesheet" href="css/L.Control.Locate.min.css">
+        <link rel="stylesheet" href="css/qgis2web.css">
+        <link rel="stylesheet" href="css/fontawesome-all.min.css">
+        <link rel="stylesheet" href="css/leaflet.photon.css">
+        <link rel="stylesheet" href="css/leaflet-measure.css">
+        <style>
+        html, body, #map {
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+        }
+        </style>
+        <title>CREEK DENSITY 2018</title>
+    </head>
+    <body>
+        <div id="map">
+        </div>
+        <script src="js/qgis2web_expressions.js"></script>
+        <script src="js/leaflet.js"></script>
+        <script src="js/L.Control.Layers.Tree.min.js"></script>
+        <script src="js/L.Control.Locate.min.js"></script>
+        <script src="js/leaflet.rotatedMarker.js"></script>
+        <script src="js/leaflet.pattern.js"></script>
+        <script src="js/leaflet-hash.js"></script>
+        <script src="js/Autolinker.min.js"></script>
+        <script src="js/rbush.min.js"></script>
+        <script src="js/labelgun.min.js"></script>
+        <script src="js/labels.js"></script>
+        <script src="js/leaflet.photon.js"></script>
+        <script src="js/leaflet-measure.js"></script>
+        <script src="data/HIGH_DENSE_CREEK_2018_2.js"></script>
+        <script src="data/LOW_DENSE_CREEK_2018_3.js"></script>
+        <script src="data/MODERATE_DENSE_CREEK_2018_4.js"></script>
+        <script src="data/VERY_HIGH_DENSE_CREEK_2018_5.js"></script>
+        <script src="data/VERY_LOW_DENSE_CREEK_2018_6.js"></script>
+        <script>
+        var highlightLayer;
+        function highlightFeature(e) {
+            highlightLayer = e.target;
+
+            if (e.target.feature.geometry.type === 'LineString' || e.target.feature.geometry.type === 'MultiLineString') {
+              highlightLayer.setStyle({
+                color: '#ffff00',
+              });
+            } else {
+              highlightLayer.setStyle({
+                fillColor: '#ffff00',
+                fillOpacity: 1
+              });
+            }
+        }
+        var map = L.map('map', {
+            zoomControl:false, maxZoom:28, minZoom:1
+        }).fitBounds([[21.386571089286935,88.05434335744046],[22.12034591801939,89.39226291762022]]);
+        var hash = new L.Hash(map);
+        map.attributionControl.setPrefix('<a href="https://github.com/tomchadwin/qgis2web" target="_blank">qgis2web</a> &middot; <a href="https://leafletjs.com" title="A JS library for interactive maps">Leaflet</a> &middot; <a href="https://qgis.org">QGIS</a>');
+        var autolinker = new Autolinker({truncate: {length: 30, location: 'smart'}});
+        // remove popup's row if "visible-with-data"
+        function removeEmptyRowsFromPopupContent(content, feature) {
+         var tempDiv = document.createElement('div');
+         tempDiv.innerHTML = content;
+         var rows = tempDiv.querySelectorAll('tr');
+         for (var i = 0; i < rows.length; i++) {
+             var td = rows[i].querySelector('td.visible-with-data');
+             var key = td ? td.id : '';
+             if (td && td.classList.contains('visible-with-data') && feature.properties[key] == null) {
+                 rows[i].parentNode.removeChild(rows[i]);
+             }
+         }
+         return tempDiv.innerHTML;
+        }
+        // modify popup if contains media
+        function addClassToPopupIfMedia(content, popup) {
+            var tempDiv = document.createElement('div');
+            tempDiv.innerHTML = content;
+            var imgTd = tempDiv.querySelector('td img');
+            if (imgTd) {
+                var src = imgTd.getAttribute('src');
+                if (/\.(jpg|jpeg|png|gif|bmp|webp|avif)$/i.test(src)) {
+                    popup._contentNode.classList.add('media');
+                    setTimeout(function() {
+                        popup.update();
+                    }, 10);
+                } else if (/\.(mp3|wav|ogg|aac)$/i.test(src)) {
+                    var audio = document.createElement('audio');
+                    audio.controls = true;
+                    audio.src = src;
+                    imgTd.parentNode.replaceChild(audio, imgTd);
+                    popup._contentNode.classList.add('media');
+                    setTimeout(function() {
+                        popup.setContent(tempDiv.innerHTML);
+                        popup.update();
+                    }, 10);
+                } else if (/\.(mp4|webm|ogg|mov)$/i.test(src)) {
+                    var video = document.createElement('video');
+                    video.controls = true;
+                    video.src = src;
+                    video.style.width = "400px";
+                    video.style.height = "300px";
+                    video.style.maxHeight = "60vh";
+                    video.style.maxWidth = "60vw";
+                    imgTd.parentNode.replaceChild(video, imgTd);
+                    popup._contentNode.classList.add('media');
+                    // Aggiorna il popup quando il video carica i metadati
+                    video.addEventListener('loadedmetadata', function() {
+                        popup.update();
+                    });
+                    setTimeout(function() {
+                        popup.setContent(tempDiv.innerHTML);
+                        popup.update();
+                    }, 10);
+                } else {
+                    popup._contentNode.classList.remove('media');
+                }
+            } else {
+                popup._contentNode.classList.remove('media');
+            }
+        }
+        var title = new L.Control({'position':'topleft'});
+        title.onAdd = function (map) {
+            this._div = L.DomUtil.create('div', 'info');
+            this.update();
+            return this._div;
+        };
+        title.update = function () {
+            this._div.innerHTML = '<h2>CREEK DENSITY 2018</h2>';
+        };
+        title.addTo(map);
+        var zoomControl = L.control.zoom({
+            position: 'topleft'
+        }).addTo(map);
+        L.control.locate({locateOptions: {maxZoom: 19}}).addTo(map);
+        var measureControl = new L.Control.Measure({
+            position: 'topleft',
+            primaryLengthUnit: 'meters',
+            secondaryLengthUnit: 'kilometers',
+            primaryAreaUnit: 'sqmeters',
+            secondaryAreaUnit: 'hectares'
+        });
+        measureControl.addTo(map);
+        document.getElementsByClassName('leaflet-control-measure-toggle')[0].innerHTML = '';
+        document.getElementsByClassName('leaflet-control-measure-toggle')[0].className += ' fas fa-ruler';
+        var bounds_group = new L.featureGroup([]);
+        function setBounds() {
+        }
+        map.createPane('pane_GoogleSatelliteHybrid_0');
+        map.getPane('pane_GoogleSatelliteHybrid_0').style.zIndex = 400;
+        var layer_GoogleSatelliteHybrid_0 = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+            pane: 'pane_GoogleSatelliteHybrid_0',
+            opacity: 1.0,
+            attribution: '',
+            minZoom: 1,
+            maxZoom: 28,
+        });
+        layer_GoogleSatelliteHybrid_0;
+        map.addLayer(layer_GoogleSatelliteHybrid_0);
+        map.createPane('pane_LINE_DENSITY_2018_1');
+        map.getPane('pane_LINE_DENSITY_2018_1').style.zIndex = 401;
+        var img_LINE_DENSITY_2018_1 = 'data/LINE_DENSITY_2018_1.png';
+        var img_bounds_LINE_DENSITY_2018_1 = [[21.5423077931454,88.15204326645653],[22.223491257704616,89.10135066694352]];
+        var layer_LINE_DENSITY_2018_1 = new L.imageOverlay(img_LINE_DENSITY_2018_1,
+                                              img_bounds_LINE_DENSITY_2018_1,
+                                              {pane: 'pane_LINE_DENSITY_2018_1'});
+        bounds_group.addLayer(layer_LINE_DENSITY_2018_1);
+        map.addLayer(layer_LINE_DENSITY_2018_1);
+        function pop_HIGH_DENSE_CREEK_2018_2(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    for (var i in e.target._eventParents) {
+                        if (typeof e.target._eventParents[i].resetStyle === 'function') {
+                            e.target._eventParents[i].resetStyle(e.target);
+                        }
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">AREA</th>\
+                        <td class="visible-with-data" id="AREA">' + (feature.properties['AREA'] !== null ? autolinker.link(String(feature.properties['AREA']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">REMARKS</th>\
+                        <td class="visible-with-data" id="REMARKS">' + (feature.properties['REMARKS'] !== null ? autolinker.link(String(feature.properties['REMARKS']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_HIGH_DENSE_CREEK_2018_2_0() {
+            return {
+                pane: 'pane_HIGH_DENSE_CREEK_2018_2',
+                stroke: false, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(141,90,153,0.0)',
+                interactive: true,
+            }
+        }
+        map.createPane('pane_HIGH_DENSE_CREEK_2018_2');
+        map.getPane('pane_HIGH_DENSE_CREEK_2018_2').style.zIndex = 402;
+        map.getPane('pane_HIGH_DENSE_CREEK_2018_2').style['mix-blend-mode'] = 'normal';
+        var layer_HIGH_DENSE_CREEK_2018_2 = new L.geoJson(json_HIGH_DENSE_CREEK_2018_2, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_HIGH_DENSE_CREEK_2018_2',
+            layerName: 'layer_HIGH_DENSE_CREEK_2018_2',
+            pane: 'pane_HIGH_DENSE_CREEK_2018_2',
+            onEachFeature: pop_HIGH_DENSE_CREEK_2018_2,
+            style: style_HIGH_DENSE_CREEK_2018_2_0,
+        });
+        bounds_group.addLayer(layer_HIGH_DENSE_CREEK_2018_2);
+        map.addLayer(layer_HIGH_DENSE_CREEK_2018_2);
+        function pop_LOW_DENSE_CREEK_2018_3(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    for (var i in e.target._eventParents) {
+                        if (typeof e.target._eventParents[i].resetStyle === 'function') {
+                            e.target._eventParents[i].resetStyle(e.target);
+                        }
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">ARREA</th>\
+                        <td class="visible-with-data" id="ARREA">' + (feature.properties['ARREA'] !== null ? autolinker.link(String(feature.properties['ARREA']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">REMARKS</th>\
+                        <td class="visible-with-data" id="REMARKS">' + (feature.properties['REMARKS'] !== null ? autolinker.link(String(feature.properties['REMARKS']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_LOW_DENSE_CREEK_2018_3_0() {
+            return {
+                pane: 'pane_LOW_DENSE_CREEK_2018_3',
+                stroke: false, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(255,158,23,0.0)',
+                interactive: true,
+            }
+        }
+        map.createPane('pane_LOW_DENSE_CREEK_2018_3');
+        map.getPane('pane_LOW_DENSE_CREEK_2018_3').style.zIndex = 403;
+        map.getPane('pane_LOW_DENSE_CREEK_2018_3').style['mix-blend-mode'] = 'normal';
+        var layer_LOW_DENSE_CREEK_2018_3 = new L.geoJson(json_LOW_DENSE_CREEK_2018_3, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_LOW_DENSE_CREEK_2018_3',
+            layerName: 'layer_LOW_DENSE_CREEK_2018_3',
+            pane: 'pane_LOW_DENSE_CREEK_2018_3',
+            onEachFeature: pop_LOW_DENSE_CREEK_2018_3,
+            style: style_LOW_DENSE_CREEK_2018_3_0,
+        });
+        bounds_group.addLayer(layer_LOW_DENSE_CREEK_2018_3);
+        map.addLayer(layer_LOW_DENSE_CREEK_2018_3);
+        function pop_MODERATE_DENSE_CREEK_2018_4(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    for (var i in e.target._eventParents) {
+                        if (typeof e.target._eventParents[i].resetStyle === 'function') {
+                            e.target._eventParents[i].resetStyle(e.target);
+                        }
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">AREA</th>\
+                        <td class="visible-with-data" id="AREA">' + (feature.properties['AREA'] !== null ? autolinker.link(String(feature.properties['AREA']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">REMARKS</th>\
+                        <td class="visible-with-data" id="REMARKS">' + (feature.properties['REMARKS'] !== null ? autolinker.link(String(feature.properties['REMARKS']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_MODERATE_DENSE_CREEK_2018_4_0() {
+            return {
+                pane: 'pane_MODERATE_DENSE_CREEK_2018_4',
+                stroke: false, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(231,113,72,0.0)',
+                interactive: true,
+            }
+        }
+        map.createPane('pane_MODERATE_DENSE_CREEK_2018_4');
+        map.getPane('pane_MODERATE_DENSE_CREEK_2018_4').style.zIndex = 404;
+        map.getPane('pane_MODERATE_DENSE_CREEK_2018_4').style['mix-blend-mode'] = 'normal';
+        var layer_MODERATE_DENSE_CREEK_2018_4 = new L.geoJson(json_MODERATE_DENSE_CREEK_2018_4, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_MODERATE_DENSE_CREEK_2018_4',
+            layerName: 'layer_MODERATE_DENSE_CREEK_2018_4',
+            pane: 'pane_MODERATE_DENSE_CREEK_2018_4',
+            onEachFeature: pop_MODERATE_DENSE_CREEK_2018_4,
+            style: style_MODERATE_DENSE_CREEK_2018_4_0,
+        });
+        bounds_group.addLayer(layer_MODERATE_DENSE_CREEK_2018_4);
+        map.addLayer(layer_MODERATE_DENSE_CREEK_2018_4);
+        function pop_VERY_HIGH_DENSE_CREEK_2018_5(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    for (var i in e.target._eventParents) {
+                        if (typeof e.target._eventParents[i].resetStyle === 'function') {
+                            e.target._eventParents[i].resetStyle(e.target);
+                        }
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">AREA</th>\
+                        <td class="visible-with-data" id="AREA">' + (feature.properties['AREA'] !== null ? autolinker.link(String(feature.properties['AREA']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">REMARKS</th>\
+                        <td class="visible-with-data" id="REMARKS">' + (feature.properties['REMARKS'] !== null ? autolinker.link(String(feature.properties['REMARKS']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_VERY_HIGH_DENSE_CREEK_2018_5_0() {
+            return {
+                pane: 'pane_VERY_HIGH_DENSE_CREEK_2018_5',
+                stroke: false, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(190,207,80,0.0)',
+                interactive: true,
+            }
+        }
+        map.createPane('pane_VERY_HIGH_DENSE_CREEK_2018_5');
+        map.getPane('pane_VERY_HIGH_DENSE_CREEK_2018_5').style.zIndex = 405;
+        map.getPane('pane_VERY_HIGH_DENSE_CREEK_2018_5').style['mix-blend-mode'] = 'normal';
+        var layer_VERY_HIGH_DENSE_CREEK_2018_5 = new L.geoJson(json_VERY_HIGH_DENSE_CREEK_2018_5, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_VERY_HIGH_DENSE_CREEK_2018_5',
+            layerName: 'layer_VERY_HIGH_DENSE_CREEK_2018_5',
+            pane: 'pane_VERY_HIGH_DENSE_CREEK_2018_5',
+            onEachFeature: pop_VERY_HIGH_DENSE_CREEK_2018_5,
+            style: style_VERY_HIGH_DENSE_CREEK_2018_5_0,
+        });
+        bounds_group.addLayer(layer_VERY_HIGH_DENSE_CREEK_2018_5);
+        map.addLayer(layer_VERY_HIGH_DENSE_CREEK_2018_5);
+        function pop_VERY_LOW_DENSE_CREEK_2018_6(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    for (var i in e.target._eventParents) {
+                        if (typeof e.target._eventParents[i].resetStyle === 'function') {
+                            e.target._eventParents[i].resetStyle(e.target);
+                        }
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">AREA</th>\
+                        <td class="visible-with-data" id="AREA">' + (feature.properties['AREA'] !== null ? autolinker.link(String(feature.properties['AREA']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">REMARKS</th>\
+                        <td class="visible-with-data" id="REMARKS">' + (feature.properties['REMARKS'] !== null ? autolinker.link(String(feature.properties['REMARKS']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_VERY_LOW_DENSE_CREEK_2018_6_0() {
+            return {
+                pane: 'pane_VERY_LOW_DENSE_CREEK_2018_6',
+                stroke: false, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(229,182,54,0.0)',
+                interactive: true,
+            }
+        }
+        map.createPane('pane_VERY_LOW_DENSE_CREEK_2018_6');
+        map.getPane('pane_VERY_LOW_DENSE_CREEK_2018_6').style.zIndex = 406;
+        map.getPane('pane_VERY_LOW_DENSE_CREEK_2018_6').style['mix-blend-mode'] = 'normal';
+        var layer_VERY_LOW_DENSE_CREEK_2018_6 = new L.geoJson(json_VERY_LOW_DENSE_CREEK_2018_6, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_VERY_LOW_DENSE_CREEK_2018_6',
+            layerName: 'layer_VERY_LOW_DENSE_CREEK_2018_6',
+            pane: 'pane_VERY_LOW_DENSE_CREEK_2018_6',
+            onEachFeature: pop_VERY_LOW_DENSE_CREEK_2018_6,
+            style: style_VERY_LOW_DENSE_CREEK_2018_6_0,
+        });
+        bounds_group.addLayer(layer_VERY_LOW_DENSE_CREEK_2018_6);
+        map.addLayer(layer_VERY_LOW_DENSE_CREEK_2018_6);
+        setBounds();
+        L.ImageOverlay.include({
+            getBounds: function () {
+                return this._bounds;
+            }
+        });
+        </script>        
+    </body>
+</html>
